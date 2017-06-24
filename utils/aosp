@@ -28,7 +28,7 @@ function aosp_create_dir_if_needed {
     echo "$msg - unexistent"
     msg="Creating $directory"
     echo "$msg"
-    mkdir -p $directory
+    sudo mkdir -p $directory
   fi
   echo "$msg - ok"
 }
