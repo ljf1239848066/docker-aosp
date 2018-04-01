@@ -1,56 +1,115 @@
 # 极简Android源码编译环境搭建工具
 
-这是一个帮助快速搭建Android源码编译环境的工具，项目fork自 [kylemanna/docker-aosp](https://github.com/kylemanna/docker-aosp)；针对Docker以及天朝的网络环境做了一部分修改，仅供China用户使用。
+# 0x0 前言
 
-## 使用步骤
-### 安装Docker
+这是一个帮助快速搭建Android源码编译环境的工具，项目fork自 [tiann/docker-aosp](https://github.com/tiann/docker-aosp)，其fork自 [kylemanna/docker-aosp](https://github.com/kylemanna/docker-aosp)；针对Docker以及天朝的网络环境做了一部分修改，仅供China用户使用。
 
-由于Android源码庞大，依赖复杂；一旦使用的编译工具链有细微的不同就可能引发编译失败。[官方文档](https://source.android.com/source/initializing.html) 推荐使用Ubuntu 14.04进行编译。如果我们用Windows或者Mac系统，传统方式是使用虚拟机；但是在今天，我们完全可以使用 **Docker** 替代！！
+> 具体介绍见：[README-OLD](https://github.com/ljf1239848066/docker-aosp/blob/master/old/README.md)
 
-使用Docker，我们可以不用担心编译环境问题；不论我们的开发机是什么系统，可以使用Docker创建Ubuntu Image，并且直接在这个Ubuntu系统环境中创建编译所需要的工具链（JDK，ubuntu系统的依赖库等等）；而且，Docker运行的Ubuntu的系统开销比虚拟机低得多，这样下载以及编译速度就有了质的提升。更重要的是，这个环境可以作为一个Image打包发布！这样，你在不同的开发机，还有你与你的同事之间有了同一套编译环境，这会省去很多不必要的麻烦。关于Docker的更多内容，见 [Docker官网](http://www.docker.com/)
+由于中间作者的脚本在我这里使用一直没成功，这里对使用步骤进行了一点修改变动。
 
-Docker的下载地址见 [Docker下载](https://www.docker.com/products/overview) ；下载完毕安装即可。
+# 0x1 镜像增强——制作自己的docker镜像
 
-### 准备工作
+## 新建Dockerfile，内容如下：
 
-如果你不是Mac系统，可以直接略过这一步。
+```
+FROM kylemanna/aosp
+LABEL maintainer="lxzh123 CORPORTION <1239848066@qq.com>"
 
-Mac的文件系统默认不区分大小写，这不满足Android源码编译系统的要求（编译的时候直接Error）；因此需要单独创建一个大小写敏感的磁盘映像。步骤如下：
+COPY sources.list /etc/apt/sources.list
 
-1. 打开Mac的系统软件：**磁盘工具**
-2. CMD + N，创建新的磁盘映像，参数设置如下图：
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc             \
+    cmake           \
+    vim             \
+    wget            \
+    unzip       &&  \
+    rm -rf /var/lib/apt/lists/*
 
-    <img src="http://7xp3xc.com1.z0.glb.clouddn.com/201601/1483019239159.png" width="430"/>
-    
-    其中磁盘大小设置为 50~100G合适，**格式一定要选择带区分大小写标志的**
- 
-### 开始下载编译
+WORKDIR /aosp
+ENTRYPOINT ["/root/docker_entrypoint.sh"]
+```
 
-真正的下载编译过程相当简单，脚本会自动完成；步骤如下：
+1.   修改软件源，改为国内分源，或者可以按需修改source.list，改为自己觉得速度比较快，方便后面安装其他软件的软件源。
+2.   补充安装几个常用软件，这个自行按需增删
 
-1. 设置Android源码下载存放的目录；如果是Mac系统，这一步必须设置为一个大小写敏感的目录；不然后面编译的时候会失败。如果不设置这一步，那么源码会下载到 `~/aosp-root` 目录；设置过程如下：
+## 编译镜像
 
-    `export AOSP_VOL=/Volume/Android/`
-    
-2. 下载wrapper脚本；如果需要下载其他系统版本，直接修改下载完毕后的build-nougat.sh文件的 android-4.4.4_r2.0.1改成你需要的分支即可，分支的信息见 [分支列表](https://source.android.com/source/build-numbers.html#source-code-tags-and-builds)
+```
+docker build . -t lxzh/aosp:1.0
+```
 
-    `curl -O https://raw.githubusercontent.com/kylemanna/docker-aosp/master/tests/build-nougat.sh`
-    
-3. 运行脚本，开始自动下载安装过程；Windows系统可以使用 [Bash for Windows](https://msdn.microsoft.com/en-us/commandline/wsl/about) 或者cygwin。
+# 0x2 下载准备
 
-    `bash ./build-nougat.sh`
+这个建议还是手动启动镜像，之前用过原作者提供的脚本，不好使，老是失败。
+另外，如果系统时Mac，一定要注意创建磁盘镜像时格式选择`OS X扩展 (区分大小写，日志式)`，磁盘大小建议**60G或更大**。
 
-这样，所有的工作就都做完了。只需静静等待即可；时间视下载速度而定，清华的镜像速度还可以，笔者使用不到2小时就完成了下载编译过程。
+## 1.  启动容器
 
-## FAQ
+```
+docker run -it --name aosp -v /Volumes/Android:/aosp -v /Volumes/Android/ccache:/tmp/ccache lxzh/aosp:1.0 /bin/bash
+```
 
-1. bash: run.sh: No such file or directory 
-    确保执行了第一步：正确地导出了环境变量 AOSP_VOL；Windows和Mac以及Linux上方式各不相同。
-2. ccache: FATAL: x_realloc: Could not allocate 8589934592 bytes
-    打开build脚本，注释掉使用ccache那一行。
-    
-## 感谢
+## 2. 下载源代码
+
+- 本地仓库初始化
+
+```
+#通过清华镜像下载
+repo init --depth 1 -u "https://aosp.tuna.tsinghua.edu.cn/platform/manifest" -b "android-8.1.0_r9" --repo-url=https://mirrors.tuna.tsinghua.edu.cn/git/git-repo/
+
+#通过中科大镜像下载
+repo init --depth 1 -u "git://mirrors.ustc.edu.cn/aosp/platform/manifest" -b "android-8.1.0_r9"  --repo-url=https://gerrit-googlesource.lug.ustc.edu.cn/git-repo
+```
+>ps: 这里-u的参数如果用https格式时，前面`--depth 1`会失效
+
+- 切换分支(不需要切换直接跳此节)
+
+当前选择了此时Android的最新分支`android-8.1.0_r9`，如果需要查询有哪些分支，在aosp目录下：
+
+```
+cd .repo/manifests/
+git branch -a
+```
+
+切换分支:
+
+```
+repo init --depth 1 -u "git://mirrors.ustc.edu.cn/aosp/platform/manifest" -b new_branch
+```
+
+-  代码下载
+
+```
+repo sync -c
+```
+
+此步骤视具体网速，耗时3h+，建议放在晚上进行，大概会下载仓库10G左右，本地checkout代码另占用37G左右，后面编译缓存大小10G，因此建议准备一个大于等于60G的磁盘。
+
+
+# 0x3 源码编译
+
+在代码根目录依次执行以下命令：
+
+```
+#获取CPU数
+cpus=$(grep ^processor /proc/cpuinfo | wc -l)
+#设置缓存大小
+prebuilts/misc/linux-x86/ccache/ccache -M 10G
+#环境设置
+source build/envsetup.sh
+#设置BUILD目标
+lunch aosp_arm-eng
+#开始编译
+make -j $cpus
+```
+
+> 其中的`aosp_arm_eng`请自行选择，[这里](https://www.cnblogs.com/chiefhsing/p/5175624.html)有介绍
+
+# 0x4 感谢
 - [kylemanna/docker-aosp](https://github.com/kylemanna/docker-aosp)
+- [tiann/docker-aosp](https://github.com/tiann/docker-aosp)
 - [清华镜像](https://mirrors.tuna.tsinghua.edu.cn/help/AOSP/)
-
+- [中科大镜像](https://lug.ustc.edu.cn/wiki/mirrors/help/aosp)
+- [云栖社区](https://yq.aliyun.com/articles/50709)
 
