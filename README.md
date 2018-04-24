@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip       &&  \
     rm -rf /var/lib/apt/lists/*
 
+ENV USE_CCACHE 1
+ENV CCACHE_DIR /tmp/ccache
 WORKDIR /aosp
 ENTRYPOINT ["/root/docker_entrypoint.sh"]
 ```
@@ -63,7 +65,7 @@ repo init --depth 1 -u "git://mirrors.ustc.edu.cn/aosp/platform/manifest" -b "an
 ```
 >ps: 这里-u的参数如果用https格式时，前面`--depth 1`会失效
 
-- 切换分支(不需要切换直接跳此节)
+- 切换分支(不需要切换直接跳过此小节)
 
 当前选择了此时Android的最新分支`android-8.1.0_r9`，如果需要查询有哪些分支，在aosp目录下：
 
@@ -105,6 +107,101 @@ make -j $cpus
 ```
 
 > 其中的`aosp_arm_eng`请自行选择，[这里](https://www.cnblogs.com/chiefhsing/p/5175624.html)有介绍
+
+## FAQ
+###  1. `ckati failed with: signal: killed`问题
+是内存不够用，建议清理内存重新make;或者是Docker内存限制，macOS可按下图修改：
+
+<img src="http://o8ydbqznc.bkt.clouddn.com/markdown/1522769631943.png" width="400"/>
+ 
+### 2. USER环境变量问题
+
+（由于运行的docker 容易没有配置USER环境变量），报错：
+
+```
+JACK VMCOMMAND="java -Dfile.encoding=UTF-8 -Xms2560m -XX:+TieredCompilation -jar out/host/linux-x86/framework/jack-launcher.jar " JACK_JAR="out/host/linux-x86/framework/jack.jar" out/host/linux-x86/bin/jack-admin start-server out/host/linux-x86/bin/jack-admin: line 27: USER: unbound variable 
+```
+
+执行
+
+``` 
+export USER=$(whoami) 
+```
+	
+命令重新编译；或者在docker的构建文件Dockerfile中加上配置容器默认用户名变量：
+	
+```
+ENV USER aosp   #或者自己需要的名字 
+```
+	
+### 3. Communication error with Jack server
+
+问题log如下：
+
+```
+FAILED: /bin/bash out/target/common/obj/JAVA_LIBRARIES/framework_intermediates/with-local/classes.dex.rsp
+Communication error with Jack server (56). Try 'jack-diagnose'
+ninja: build stopped: subcommand failed.
+build/core/ninja.mk:148: recipe for target 'ninja_wrapper' failed
+make: *** [ninja_wrapper] Error 1
+```
+Jack server 启动失败，可以尝试执行以下命令解决：
+
+```
+jack-admin start-server
+```
+
+### 4. Out of memory error
+
+问题log如下：
+
+```
+Try increasing heap size with java option '-Xmx<size>'.
+Warning: This may have produced partial or corrupted output.
+[ 34% 12242/35623] Building with Jack: out/target/common/obj/JAVA_LIBRARIES/libprotobuf-java-nano_intermediates/classes.jack
+ninja: build stopped: subcommand failed.
+build/core/ninja.mk:148: recipe for target 'ninja_wrapper' failed
+make: *** [ninja_wrapper] Error 1
+```
+
+**解决方法**：
+上面已经给出提示：`Try increasing heap size with java option '-Xmx<size>'`。
+
+*  1. 查询Jack server运行状态 
+
+```
+jack-admin list-server
+```
+
+*  2. 停止Jack server
+
+```
+jack-admin stop-server
+```
+
+* 3. 配置-Xmx参数
+
+添加`-Xmx2048m`或者`-Xmx2g`，当然也可以设置更大的内存，例如-Xmx3g、-Xmx4g。
+
+打开**`prebuilts/sdk/tools/jack-admin`**文件，修改**`454`**行:
+
+```
+JACK_SERVER_COMMAND="java -XX:MaxJavaStackTraceDepth=-1 -Djava.io.tmpdir=$TMPDIR $JACK_SERVER_VM_ARGUMENTS -cp $LAUNCHER_JAR $LAUNCHER_NAME"
+```
+
+改为:
+
+```
+JACK_SERVER_COMMAND="java -Xmx2g -XX:MaxJavaStackTraceDepth=-1 -Djava.io.tmpdir=$TMPDIR $JACK_SERVER_VM_ARGUMENTS -cp $LAUNCHER_JAR $LAUNCHER_NAME"
+```
+
+*  4. 重启Jack server
+
+```
+jack-admin start-server
+```
+启动后重新编译。
+
 
 # 0x4 感谢
 - [kylemanna/docker-aosp](https://github.com/kylemanna/docker-aosp)

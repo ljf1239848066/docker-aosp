@@ -11,5 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip       &&  \
     rm -rf /var/lib/apt/lists/*
 
+ENV USE_CCACHE 1
+ENV CCACHE_DIR /tmp/ccache
 WORKDIR /aosp
 ENTRYPOINT ["/root/docker_entrypoint.sh"]
