@@ -44,7 +44,7 @@ docker build . -t lxzh/aosp:1.0
 # 0x2 下载准备
 
 这个建议还是手动启动镜像，之前用过原作者提供的脚本，不好使，老是失败。
-另外，如果系统时Mac，一定要注意创建磁盘镜像时格式选择`OS X扩展 (区分大小写，日志式)`，磁盘大小建议**60G或更大**。
+另外，如果系统时Mac，一定要注意创建磁盘镜像时格式选择`OS X扩展 (区分大小写，日志式)`，否则会报FAQ第1条错误，磁盘大小建议**60G或更大**。
 
 ## 1.  启动容器
 
@@ -86,7 +86,21 @@ repo init --depth 1 -u "git://mirrors.ustc.edu.cn/aosp/platform/manifest" -b new
 repo sync -c
 ```
 
-此步骤视具体网速，耗时3h+，建议放在晚上进行，大概会下载仓库10G左右，本地checkout代码另占用37G左右，后面编译缓存大小10G，因此建议准备一个大于等于60G的磁盘。
+此步骤视具体网速，耗时3h+，建议放在晚上进行，大概会下载仓库10G左右，本地checkout代码另占用37G左右，后面编译缓存大小10G，因此建议准备一个大于等于60G(视Android版本差异，版本越新占用空间越大，不确定就尽量准备足够大的硬盘)的磁盘。
+
+为避免网络问题同步失败，可准备一个脚本sync.sh循环同步直到同步成功为止：
+
+```
+#!/bin/bash 
+repo sync -c -j4
+while [ $? = 1 ]; do
+   echo "================sync failed, re-sync again =====" 
+   sleep 3
+   repo sync
+        done
+```
+
+保存后`./sync.sh`执行，如果执行报错赋一下权限`chmod +x sync.sh`，重新执行即可。
 
 
 # 0x3 源码编译
@@ -109,12 +123,27 @@ make -j $cpus
 > 其中的`aosp_arm_eng`请自行选择，[这里](https://www.cnblogs.com/chiefhsing/p/5175624.html)有介绍
 
 ## FAQ
-###  1. `ckati failed with: signal: killed`问题
+
+### 1. 磁盘不区分大小写问题
+
+```
+15:13:31 ************************************************************
+15:13:31 You are building on a case-insensitive filesystem.
+15:13:31 Please move your source tree to a case-sensitive filesystem.
+15:13:31 ************************************************************
+15:13:31 Case-insensitive filesystems not supported
+
+#### failed to build some targets (13 seconds) ####
+```
+
+需要格式化磁盘为区分大小写模式。
+
+###  2. `ckati failed with: signal: killed`问题
 是内存不够用，建议清理内存重新make;或者是Docker内存限制，macOS可按下图修改：
 
 <img src="http://o8ydbqznc.bkt.clouddn.com/markdown/1522769631943.png" width="400"/>
  
-### 2. USER环境变量问题
+### 3. USER环境变量问题
 
 （由于运行的docker 容易没有配置USER环境变量），报错：
 
@@ -134,7 +163,7 @@ export USER=$(whoami)
 ENV USER aosp   #或者自己需要的名字 
 ```
 	
-### 3. Communication error with Jack server
+### 4. Communication error with Jack server
 
 问题log如下：
 
@@ -151,7 +180,7 @@ Jack server 启动失败，可以尝试执行以下命令解决：
 jack-admin start-server
 ```
 
-### 4. Out of memory error
+### 5. Out of memory error
 
 问题log如下：
 
